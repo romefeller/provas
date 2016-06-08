@@ -82,6 +82,9 @@ getImageR iid = do
         <img class="card-media" src=@{StaticR $ StaticRoute [nome $ imagensNome img] [] }>
     |]
 
+widgetForm :: Route HelloForms -> Enctype -> Widget -> Text -> Widget
+widgetForm x enctype widget y = $(whamletFile "templates/form.hamlet")
+
 fileForm :: Form Imagens
 fileForm = renderTable $ Imagens <$>
            (fmap ((Arquivo "") . Just) $ fileAFormReq "Required file")
@@ -91,11 +94,7 @@ getErroR = defaultLayout [whamlet| Erro |]
 
 getFileR = do
     (widget, enctype) <- generateFormPost fileForm
-    defaultLayout [whamlet|
-<form method=post enctype=#{enctype} action=@{FileR}>
-        ^{widget}
-        <input type=submit>
-|]
+    defaultLayout $ widgetForm FileR enctype widget "Arquivo"
 
 postFileR :: Handler Html
 postFileR = do
