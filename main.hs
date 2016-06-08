@@ -5,6 +5,8 @@
 import Yesod
 import Yesod.Form
 import Yesod.Static
+import Text.Lucius
+import Text.Julius
 import Control.Applicative
 import Data.Text (Text, pack)
 import System.Directory
@@ -20,10 +22,36 @@ data HelloForms = HelloForms {getStatic :: Static, connPool :: ConnectionPool}
 instance RenderMessage HelloForms FormMessage where
     renderMessage _ _ = defaultFormMessage
 
+share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+Imagens 
+   nome Arquivo 
+   deriving Show
+
+Users json
+   nome Text
+   login Text
+   senha Text
+   deriving Show
+|]
+
+staticFiles "static"
+
+mkYesod "HelloForms" [parseRoutes|
+/file FileR GET POST
+/imagem/#ImagensId ImageR GET
+/erro ErroR GET
+/static StaticR Static getStatic
+/login LoginR GET POST
+/perfil/#UsersId PerfilR GET
+/cadastro/usuario UsuarioR GET POST
+/logout LogoutR GET
+|]
+
 instance Yesod HelloForms where
     authRoute _ = Just LoginR
     
     isAuthorized LoginR _ = return Authorized
+    isAuthorized UsuarioR _ = return Authorized
     isAuthorized _ _ = isUser
 
 isUser = do
@@ -39,24 +67,7 @@ isAdmin = do
         Just "admin" -> Authorized 
         Just _ -> Unauthorized "Voce precisa ser admin para entrar aqui"
 
-
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-Imagens 
-   nome Arquivo 
-   deriving Show
-|]
-
-staticFiles "static"
-
-mkYesod "HelloForms" [parseRoutes|
-/file FileR GET POST
-/imagem/#ImagensId ImageR GET
-/erro ErroR GET
-/static StaticR Static getStatic
-/login LoginR GET POST
-/cadastro/usuario UsuarioR GET POST
-/logout LogoutR GET
-|]
+type Form a = Html -> MForm Handler (FormResult a, Widget)
 
 instance YesodPersist HelloForms where
     type YesodPersistBackend HelloForms = SqlBackend
@@ -71,7 +82,7 @@ getImageR iid = do
         <img class="card-media" src=@{StaticR $ StaticRoute [nome $ imagensNome img] [] }>
     |]
 
-fileForm :: Html -> MForm Handler (FormResult Imagens, Widget)
+fileForm :: Form Imagens
 fileForm = renderTable $ Imagens <$>
            (fmap ((Arquivo "") . Just) $ fileAFormReq "Required file")
 
@@ -102,7 +113,6 @@ postLoginR :: Handler Html
 postLoginR = do
            ((result, _), _) <- runFormPost formLogin
            case result of 
-               FormSuccess ("admin","admin") -> setSession "_ID" "admin" >> redirect AdminR
                FormSuccess (login,senha) -> do 
                    user <- runDB $ selectFirst [UsersLogin ==. login, UsersSenha ==. senha] []
                    case user of
@@ -140,6 +150,16 @@ getLogoutR = do
          <h1> ADEUS!
      |]
 
+formUser :: Form Users
+formUser = renderDivs $ Users <$>
+           areq textField "Nome: " Nothing <*>
+           areq textField "Login: " Nothing <*>
+           areq passwordField "Senha: " Nothing
+
+formLogin :: Form (Text,Text)
+formLogin = renderDivs $ (,) <$>
+           areq textField "Login: " Nothing <*>
+           areq passwordField "Senha: " Nothing
 
 uploadDirectory :: FilePath
 uploadDirectory = "static"
